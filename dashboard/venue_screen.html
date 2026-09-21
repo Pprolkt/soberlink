@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SoberLink — Venue Screen</title>
+<style>
+  :root { --bg:#0f1115; --card:#1a1d24; --border:#2a2e37; --text:#e8e9ec; --muted:#9aa0ab;
+    --low:#3ba55d; --moderate:#d4a72c; --high:#e0722f; --veryhigh:#d9403f; }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 2rem; }
+  .header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.3rem; }
+  h1 { font-size: 1.4rem; margin: 0; }
+  .venue-select-row { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+  select { padding: 0.3rem 0.6rem; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
+  .patron-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; }
+  .badge { display: inline-block; padding: 0.25rem 0.7rem; border-radius: 999px; font-weight: 600; font-size: 0.8rem; color: #0f1115; margin-bottom: 0.5rem; }
+  .risk-LOW { background: var(--low); }
+  .risk-MODERATE { background: var(--moderate); }
+  .risk-HIGH { background: var(--high); }
+  .risk-VERY-HIGH { background: var(--veryhigh); }
+  .sid { color: var(--muted); font-size: 0.75rem; margin-bottom: 0.4rem; }
+  .score { font-size: 1.5rem; font-weight: 700; }
+  .flag { font-size: 0.8rem; color: var(--high); font-weight: 600; margin-top: 0.4rem; }
+  .empty { color: var(--muted); padding: 2rem; text-align: center; grid-column: 1 / -1; }
+  .disclaimer { color: var(--muted); font-size: 0.8rem; margin-top: 1.5rem; }
+  .updated { color: var(--muted); font-size: 0.75rem; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>SoberLink — Live Venue Screen</h1>
+    <span class="updated" id="updated"></span>
+  </div>
+  <div class="venue-select-row">
+    Venue:
+    <select id="venueSelect" onchange="refresh()">
+      <option value="VEN-001">VEN-001 — Test Bar</option>
+      <option value="VEN-002">VEN-002 — Second Bar</option>
+      <option value="VEN-003">VEN-003 — Third Bar</option>
+    </select>
+    · auto-refreshes every 5s
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="disclaimer">
+    Risk indicator only. This is not a BAC estimate or automatic service decision.
+    Final assessment remains with RSA-trained staff.
+  </div>
+
+<script>
+const API_BASE = "http://127.0.0.1:8000";
+
+async function refresh() {
+  const venue = document.getElementById("venueSelect").value;
+  const grid = document.getElementById("grid");
+  try {
+    const resp = await fetch(`${API_BASE}/venues/${venue}/active-sessions`);
+    const data = await resp.json();
+    document.getElementById("updated").textContent = "Updated " + new Date().toLocaleTimeString();
+
+    if (!data.active_sessions.length) {
+      grid.innerHTML = `<div class="empty">No patrons currently checked in at ${venue}</div>`;
+      return;
+    }
+
+    grid.innerHTML = data.active_sessions.map(s => `
+      <div class="patron-card">
+        <span class="badge risk-${s.risk_level.replace(" ", "-")}">${s.risk_level}</span>
+        <div class="sid">SL-****${s.session_id.slice(-4).toUpperCase()}</div>
+        <div class="score">Score: ${s.risk_score}</div>
+        ${s.previous_refusal ? '<div class="flag">⚠ Previous refusal</div>' : ''}
+        ${s.staff_concern ? '<div class="flag">⚠ Staff concern noted</div>' : ''}
+      </div>
+    `).join("");
+  } catch (e) {
+    grid.innerHTML = `<div class="empty">Could not reach API. Is uvicorn running?</div>`;
+  }
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

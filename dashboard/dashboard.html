@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SoberLink — Venue Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #1a1d24; --border: #2a2e37; --text: #e8e9ec; --muted: #9aa0ab;
+    --low: #3ba55d; --moderate: #d4a72c; --high: #e0722f; --veryhigh: #d9403f;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 2rem; }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 1.5rem; }
+  .row { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+  input { flex: 1; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 0.95rem; }
+  button { padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; font-size: 0.9rem; }
+  button:hover { background: #23262e; }
+  button.primary { background: #3a6ee0; border-color: #3a6ee0; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+  .session-id { color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem; }
+  .risk-badge { display: inline-block; padding: 0.3rem 0.9rem; border-radius: 999px; font-weight: 600; font-size: 0.9rem; color: #0f1115; }
+  .risk-LOW { background: var(--low); }
+  .risk-MODERATE { background: var(--moderate); }
+  .risk-HIGH { background: var(--high); }
+  .risk-VERY.HIGH, .risk-VERY-HIGH { background: var(--veryhigh); }
+  .score { font-size: 2.4rem; font-weight: 700; margin: 0.4rem 0; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin: 1rem 0; font-size: 0.9rem; }
+  .stat-label { color: var(--muted); }
+  .factors { font-size: 0.9rem; line-height: 1.7; }
+  .factor-pos { color: var(--high); }
+  .factor-zero { color: var(--muted); }
+  .actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
+  .disclaimer { background: #23262e; border: 1px solid var(--border); border-radius: 10px; padding: 0.8rem 1rem; font-size: 0.85rem; color: var(--muted); margin-top: 1rem; }
+  .flag-yes { color: var(--high); font-weight: 600; }
+  .flag-no { color: var(--muted); }
+  #status { color: var(--muted); font-size: 0.85rem; margin-bottom: 1rem; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>SoberLink — Venue Dashboard</h1>
+ 
+  <div class="row">
+    <input id="tokenInput" placeholder="Paste session token or scanned URL" />
+    <button class="primary" onclick="loadSession()">Load / Scan</button>
+  </div>
+  <div class="row">
+    <label style="color:var(--muted);font-size:0.85rem;align-self:center;">This venue:</label>
+    <select id="venueSelect" style="flex:1;padding:0.5rem;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);">
+      <option value="VEN-001">VEN-001 — Test Bar</option>
+      <option value="VEN-002">VEN-002 — Second Bar</option>
+      <option value="VEN-003">VEN-003 — Third Bar</option>
+    </select>
+  </div>
+  <div id="status"></div>
+ 
+  <div id="sessionCard" style="display:none">
+    <div class="card">
+      <div class="session-id" id="sessionIdLabel"></div>
+      <span class="risk-badge" id="riskBadge"></span>
+      <div class="score" id="scoreValue"></div>
+ 
+      <div class="stats">
+        <div><span class="stat-label">Recent (3h):</span> <span id="drinks3h"></span> standard drinks</div>
+        <div><span class="stat-label">Venues visited:</span> <span id="venues"></span></div>
+        <div><span class="stat-label">Previous refusal:</span> <span id="refusalFlag"></span></div>
+        <div><span class="stat-label">Staff concern:</span> <span id="concernFlag"></span></div>
+      </div>
+ 
+      <div class="factors" id="factorsList"></div>
+ 
+      <div style="margin-top:1rem;">
+        <label style="color:var(--muted);font-size:0.85rem;">Record a drink:</label>
+        <div class="row" style="margin-top:0.4rem;margin-bottom:0;">
+          <select id="drinkSelect" style="flex:1;padding:0.5rem;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);">
+            <option value="beer_285ml|285|4.8">285mL full-strength beer (~1.0 std)</option>
+            <option value="beer_375ml|375|4.8" selected>375mL full-strength beer (~1.4 std)</option>
+            <option value="beer_425ml|425|4.8">425mL full-strength beer (~1.6 std)</option>
+            <option value="wine_100ml|100|13">100mL wine (~1.0 std)</option>
+            <option value="wine_150ml|150|13.5">150mL wine (~1.6 std)</option>
+            <option value="spirit_30ml|30|40">30mL spirits (~1.0 std)</option>
+            <option value="premix_375ml|375|5">375mL premix (~1.5 std)</option>
+          </select>
+          <button onclick="recordDrink()">Record Drink</button>
+        </div>
+      </div>
+ 
+      <div class="actions">
+        <button onclick="recordConcern()">Record Concern</button>
+        <button onclick="recordRefusal()">Record Refusal</button>
+        <button onclick="loadSession()">Refresh</button>
+      </div>
+ 
+      <div class="disclaimer">
+        Risk indicator only. This is not a BAC estimate or automatic service decision.
+        Final assessment remains with RSA-trained staff.
+      </div>
+    </div>
+  </div>
+</div>
+ 
+<script>
+const API_BASE = "http://" + window.location.hostname + ":8000";
+// Prototype-only placeholder — Phase 11 replaces this with real per-staff login
+const STAFF_ID = "b0a56b91-1d22-4bf4-a0c0-66f1b9ddaab0";
+ 
+function currentVenue() {
+  return document.getElementById("venueSelect").value;
+}
+ 
+function extractToken(raw) {
+  raw = raw.trim();
+  const parts = raw.split("/");
+  return parts[parts.length - 1];
+}
+ 
+function maskSessionId(id) {
+  return "SL-****" + id.slice(-4).toUpperCase();
+}
+ 
+function setStatus(msg, isError) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.style.color = isError ? "#e0722f" : "#9aa0ab";
+}
+ 
+async function loadSession() {
+  const raw = document.getElementById("tokenInput").value;
+  if (!raw) { setStatus("Enter a token or scanned URL first.", true); return; }
+  const token = extractToken(raw);
+  setStatus("Loading...");
+ 
+  try {
+    const riskResp = await fetch(`${API_BASE}/sessions/${token}/risk`);
+    if (!riskResp.ok) {
+      const err = await riskResp.json();
+      setStatus("Error: " + (err.detail?.error || riskResp.status), true);
+      document.getElementById("sessionCard").style.display = "none";
+      return;
+    }
+    const risk = await riskResp.json();
+    renderRisk(risk, token);
+    setStatus("Loaded.");
+  } catch (e) {
+    setStatus("Could not reach API. Is uvicorn running on port 8000?", true);
+  }
+}
+ 
+function renderRisk(risk, token) {
+  document.getElementById("sessionCard").style.display = "block";
+  document.getElementById("sessionIdLabel").textContent =
+    "Anonymous Session: " + maskSessionId(risk.session_id);
+ 
+  const badge = document.getElementById("riskBadge");
+  badge.textContent = risk.risk_level;
+  badge.className = "risk-badge risk-" + risk.risk_level.replace(" ", "-");
+ 
+  document.getElementById("scoreValue").textContent = "Score: " + risk.risk_score;
+  document.getElementById("drinks3h").textContent = risk.standard_drinks_3h;
+  document.getElementById("venues").textContent = risk.unique_venues_visited;
+ 
+  const refusalEl = document.getElementById("refusalFlag");
+  refusalEl.textContent = risk.previous_refusal ? "YES" : "NO";
+  refusalEl.className = risk.previous_refusal ? "flag-yes" : "flag-no";
+ 
+  const concernEl = document.getElementById("concernFlag");
+  concernEl.textContent = risk.staff_concern ? "YES" : "NO";
+  concernEl.className = risk.staff_concern ? "flag-yes" : "flag-no";
+ 
+  const factorsList = document.getElementById("factorsList");
+  factorsList.innerHTML = risk.factors
+    .map(f => `<div class="${f.points > 0 ? 'factor-pos' : 'factor-zero'}">
+      ${f.points >= 0 ? '+' : ''}${f.points} ${f.label}</div>`)
+    .join("");
+ 
+  document.getElementById("tokenInput").dataset.token = token;
+}
+ 
+async function recordDrink() {
+  const token = document.getElementById("tokenInput").dataset.token;
+  if (!token) { setStatus("Load a session first.", true); return; }
+  const [drink_type, volume_ml, abv] = document.getElementById("drinkSelect").value.split("|");
+  await fetch(`${API_BASE}/sessions/${token}/drinks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ venue_id: currentVenue(), drink_type, volume_ml: parseFloat(volume_ml), abv: parseFloat(abv) }),
+  });
+  loadSession();
+}
+ 
+async function recordConcern() {
+  const token = document.getElementById("tokenInput").dataset.token;
+  if (!token) { setStatus("Load a session first.", true); return; }
+  await fetch(`${API_BASE}/sessions/${token}/concerns`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ venue_id: currentVenue(), staff_id: STAFF_ID, note: "" }),
+  });
+  loadSession();
+}
+ 
+async function recordRefusal() {
+  const token = document.getElementById("tokenInput").dataset.token;
+  if (!token) { setStatus("Load a session first.", true); return; }
+  await fetch(`${API_BASE}/sessions/${token}/refusals`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ venue_id: currentVenue(), staff_id: STAFF_ID, note: "" }),
+  });
+  loadSession();
+}
+ 
+// If opened as dashboard.html?token=XYZ (e.g. from the webcam scanner or a QR
+// deep link), auto-fill and load that session immediately — no manual paste needed.
+(function autoLoadFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
+  if (token) {
+    document.getElementById("tokenInput").value = token;
+    loadSession();
+  }
+})();
+</script>
+</body>
+</html>

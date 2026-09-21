@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SoberLink — Check In</title>
+<style>
+  :root { --bg:#0f1115; --card:#1a1d24; --border:#2a2e37; --text:#e8e9ec; --muted:#9aa0ab;
+    --low:#3ba55d; --moderate:#d4a72c; --high:#e0722f; --veryhigh:#d9403f; }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    margin: 0; padding: 1.5rem; display:flex; flex-direction:column; align-items:center; min-height:100vh; }
+  .wrap { max-width: 420px; width: 100%; text-align: center; }
+  h1 { font-size: 1.2rem; margin-bottom: 0.3rem; }
+  .venue-name { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 2rem 1.5rem; margin-top: 1rem; }
+  .spinner { font-size: 0.9rem; color: var(--muted); }
+  .status-icon { font-size: 3rem; margin-bottom: 0.5rem; }
+  .status-title { font-size: 1.3rem; font-weight: 600; margin-bottom: 0.5rem; }
+  .status-sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+  #qrBox { margin-top: 1rem; }
+  #qrBox img { background: white; padding: 12px; border-radius: 12px; }
+  .qr-hint { color: var(--muted); font-size: 0.85rem; margin-top: 0.8rem; }
+  .disclaimer { color: var(--muted); font-size: 0.75rem; margin-top: 2rem; line-height: 1.5; }
+  .error { color: var(--high); }
+  .debug { color: var(--muted); font-size: 0.75rem; margin-top: 1rem; text-align: left;
+    background: #0a0b0e; border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem;
+    word-break: break-all; font-family: monospace; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>SoberLink Check-In</h1>
+  <div class="venue-name" id="venueLabel">Loading venue...</div>
+ 
+  <div class="card">
+    <div id="content"><div class="spinner">Checking in...</div></div>
+  </div>
+ 
+  <div class="disclaimer">
+    SoberLink is voluntary and anonymous. No name, phone, or ID is stored —
+    only a random session code on your device.
+  </div>
+</div>
+ 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const API_BASE = "http://" + window.location.hostname + ":8000";
+ 
+function getVenueFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("venue") || "VEN-001";
+}
+ 
+function getStoredToken() {
+  return localStorage.getItem("soberlink_token");
+}
+ 
+function storeToken(token) {
+  localStorage.setItem("soberlink_token", token);
+}
+ 
+function clearStoredToken() {
+  localStorage.removeItem("soberlink_token");
+}
+ 
+async function ensureSession() {
+  const existing = getStoredToken();
+  if (existing) {
+    const check = await fetch(`${API_BASE}/sessions/${existing}`);
+    if (check.ok) return existing;
+    // stored token is stale/expired/invalid on the server — drop it and start fresh
+    clearStoredToken();
+  }
+  const resp = await fetch(`${API_BASE}/sessions`, { method: "POST" });
+  if (!resp.ok) {
+    throw new Error(`Session creation failed: HTTP ${resp.status}`);
+  }
+  const data = await resp.json();
+  storeToken(data.raw_token);
+  return data.raw_token;
+}
+ 
+async function checkinFlow() {
+  const venue = getVenueFromURL();
+  document.getElementById("venueLabel").textContent = "Checking in at " + venue;
+ 
+  try {
+    const token = await ensureSession();
+ 
+    const checkinResp = await fetch(`${API_BASE}/sessions/${token}/checkin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ venue_id: venue }),
+    });
+    if (!checkinResp.ok) {
+      const errBody = await checkinResp.text();
+      throw new Error(`Checkin failed: HTTP ${checkinResp.status} — ${errBody}`);
+    }
+ 
+    const riskResp = await fetch(`${API_BASE}/sessions/${token}/risk`);
+    if (!riskResp.ok) {
+      throw new Error(`Risk lookup failed: HTTP ${riskResp.status}`);
+    }
+    const risk = await riskResp.json();
+    render(risk, token);
+  } catch (e) {
+    document.getElementById("content").innerHTML = `
+      <div class="error">Could not check in. Please show this screen to staff for a manual check-in.</div>
+      <div class="debug">API_BASE: ${API_BASE}<br>Error: ${e.message}</div>
+    `;
+  }
+}
+ 
+function render(risk, token) {
+  const content = document.getElementById("content");
+  const sessionUrl = `https://example.soberlink.app/session/${token}`;
+ 
+  if (risk.risk_level === "LOW") {
+    content.innerHTML = `
+      <div class="status-icon">✅</div>
+      <div class="status-title">You're checked in</div>
+      <div class="status-sub">Enjoy your night. Stay safe.</div>
+      <div id="qrBox" style="margin-top:1.2rem;"></div>
+      <div class="qr-hint">Show this to staff when ordering a drink</div>
+    `;
+    new QRCode(document.getElementById("qrBox"), {
+      text: sessionUrl, width: 120, height: 120,
+    });
+    return;
+  }
+ 
+  content.innerHTML = `
+    <div class="status-icon">🪪</div>
+    <div class="status-title">You're checked in</div>
+    <div class="status-sub">Please show this code to staff if asked</div>
+    <div id="qrBox"></div>
+    <div class="qr-hint">Staff will scan this — no need to explain anything</div>
+  `;
+  new QRCode(document.getElementById("qrBox"), {
+    text: sessionUrl, width: 180, height: 180,
+  });
+}
+ 
+checkinFlow();
+</script>
+</body>
+</html>
