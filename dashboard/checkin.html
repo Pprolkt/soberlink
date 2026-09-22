@@ -45,7 +45,7 @@
  
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
-const API_BASE = "http://" + window.location.hostname + ":8000";
+const API_BASE = "http://" + (window.location.hostname || "localhost") + ":8000";
  
 function getVenueFromURL() {
   const params = new URLSearchParams(window.location.search);

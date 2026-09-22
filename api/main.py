@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -47,6 +47,19 @@ class RefusalRequest(BaseModel):
     venue_id: str
     staff_id: str
     note: Optional[str] = ""
+
+# ---------- auth (token now comes from a header, not the URL) ----------
+
+def get_token(authorization: str = Header(...)) -> str:
+    """Expects: Authorization: Bearer <raw_token>
+    Keeping the token in a header (instead of the URL) means it never shows up
+    in Azure's request logs, unlike query params or path segments."""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail={"error": "invalid_authorization_header"})
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail={"error": "missing_token"})
+    return token
 
 # ---------- helpers ----------
 
@@ -224,6 +237,7 @@ def get_active_sessions_for_venue(venue_code: str, hours: float = 4):
 
 @app.post("/sessions", status_code=201)
 def create_session_endpoint():
+    # No token needed here — this is the one call that CREATES a token.
     payload = create_session_payload(session_hours=SESSION_HOURS)
     conn = get_connection()
     cur = conn.cursor()
@@ -241,8 +255,8 @@ def create_session_endpoint():
         "expires_at": payload["expires_at"],
     }
 
-@app.get("/sessions/{token}")
-def get_session_endpoint(token: str):
+@app.get("/sessions/me")
+def get_session_endpoint(token: str = Depends(get_token)):
     s = get_session_by_token(token)
     return {
         "session_id": s["session_id"],
@@ -251,8 +265,8 @@ def get_session_endpoint(token: str):
         "expires_at": s["expires_at"],
     }
 
-@app.post("/sessions/{token}/checkin", status_code=201)
-def checkin_endpoint(token: str, body: CheckinRequest):
+@app.post("/sessions/checkin", status_code=201)
+def checkin_endpoint(body: CheckinRequest, token: str = Depends(get_token)):
     s = get_session_by_token(token)
     venue_id = get_venue_id(body.venue_id)
     conn = get_connection()
@@ -271,8 +285,8 @@ def checkin_endpoint(token: str, body: CheckinRequest):
     conn.close()
     return {"event_id": event_id, "event_type": "CHECK_IN", "recorded_at": recorded_at}
 
-@app.post("/sessions/{token}/drinks", status_code=201)
-def add_drink_endpoint(token: str, body: DrinkRequest):
+@app.post("/sessions/drinks", status_code=201)
+def add_drink_endpoint(body: DrinkRequest, token: str = Depends(get_token)):
     s = get_session_by_token(token)
     venue_id = get_venue_id(body.venue_id)
     sd = standard_drinks(body.volume_ml, body.abv)
@@ -297,8 +311,8 @@ def add_drink_endpoint(token: str, body: DrinkRequest):
     conn.close()
     return {"drink_event_id": drink_event_id, "standard_drinks": sd, "recorded_at": recorded_at}
 
-@app.post("/sessions/{token}/concerns", status_code=201)
-def add_concern_endpoint(token: str, body: ConcernRequest):
+@app.post("/sessions/concerns", status_code=201)
+def add_concern_endpoint(body: ConcernRequest, token: str = Depends(get_token)):
     s = get_session_by_token(token)
     venue_id = get_venue_id(body.venue_id)
     conn = get_connection()
@@ -322,8 +336,8 @@ def add_concern_endpoint(token: str, body: ConcernRequest):
     conn.close()
     return {"staff_event_id": staff_event_id, "event_type": "STAFF_CONCERN", "recorded_at": recorded_at}
 
-@app.post("/sessions/{token}/refusals", status_code=201)
-def add_refusal_endpoint(token: str, body: RefusalRequest):
+@app.post("/sessions/refusals", status_code=201)
+def add_refusal_endpoint(body: RefusalRequest, token: str = Depends(get_token)):
     s = get_session_by_token(token)
     venue_id = get_venue_id(body.venue_id)
     conn = get_connection()
@@ -347,14 +361,14 @@ def add_refusal_endpoint(token: str, body: RefusalRequest):
     conn.close()
     return {"staff_event_id": staff_event_id, "event_type": "SERVICE_REFUSAL", "recorded_at": recorded_at}
 
-@app.get("/sessions/{token}/risk")
-def get_risk_endpoint(token: str):
+@app.get("/sessions/risk")
+def get_risk_endpoint(token: str = Depends(get_token)):
     s = get_session_by_token(token)
     risk = calculate_risk(s["session_id"])
     return {"session_id": s["session_id"], **risk, "disclaimer": DISCLAIMER}
 
-@app.delete("/sessions/{token}")
-def end_session_endpoint(token: str):
+@app.delete("/sessions")
+def end_session_endpoint(token: str = Depends(get_token)):
     s = get_session_by_token(token)
     conn = get_connection()
     cur = conn.cursor()
@@ -363,4 +377,3 @@ def end_session_endpoint(token: str):
     cur.close()
     conn.close()
     return {"session_id": s["session_id"], "status": "checked_out"}
-
