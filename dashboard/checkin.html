@@ -64,10 +64,17 @@ function clearStoredToken() {
   localStorage.removeItem("soberlink_token");
 }
  
+// Token is now sent as a header on every authenticated call, never in the URL.
+function authHeaders(token, extra = {}) {
+  return { "Authorization": `Bearer ${token}`, ...extra };
+}
+ 
 async function ensureSession() {
   const existing = getStoredToken();
   if (existing) {
-    const check = await fetch(`${API_BASE}/sessions/${existing}`);
+    const check = await fetch(`${API_BASE}/sessions/me`, {
+      headers: authHeaders(existing),
+    });
     if (check.ok) return existing;
     // stored token is stale/expired/invalid on the server — drop it and start fresh
     clearStoredToken();
@@ -88,9 +95,9 @@ async function checkinFlow() {
   try {
     const token = await ensureSession();
  
-    const checkinResp = await fetch(`${API_BASE}/sessions/${token}/checkin`, {
+    const checkinResp = await fetch(`${API_BASE}/sessions/checkin`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(token, { "Content-Type": "application/json" }),
       body: JSON.stringify({ venue_id: venue }),
     });
     if (!checkinResp.ok) {
@@ -98,7 +105,9 @@ async function checkinFlow() {
       throw new Error(`Checkin failed: HTTP ${checkinResp.status} — ${errBody}`);
     }
  
-    const riskResp = await fetch(`${API_BASE}/sessions/${token}/risk`);
+    const riskResp = await fetch(`${API_BASE}/sessions/risk`, {
+      headers: authHeaders(token),
+    });
     if (!riskResp.ok) {
       throw new Error(`Risk lookup failed: HTTP ${riskResp.status}`);
     }
@@ -146,3 +155,4 @@ checkinFlow();
 </script>
 </body>
 </html>
+

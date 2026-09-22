@@ -363,3 +363,4 @@ def end_session_endpoint(token: str):
     cur.close()
     conn.close()
     return {"session_id": s["session_id"], "status": "checked_out"}
+
