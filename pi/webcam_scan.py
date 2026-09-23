@@ -3,26 +3,30 @@ import hashlib
 import sys
 import os
 import webbrowser
-import socket
+from urllib.parse import urlparse, parse_qs
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'api'))
 from db import get_connection
 
 DASHBOARD_PORT = 8080
-
-def get_local_ip():
-    """Best-effort guess at this machine's LAN IP, for building the dashboard URL."""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "127.0.0.1"
+# EDIT THIS to match your laptop's actual LAN/hotspot IP — same value you use
+# in generate_venue_qrs.py.
+DASHBOARD_HOST = "172.20.10.4"
 
 def hash_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+
+def extract_token(url: str) -> str:
+    """Pulls the token out of either URL style:
+    - http://host:port/dashboard.html?token=XYZ  (current format)
+    - http://host/session/XYZ                     (old format, just in case)
+    """
+    parsed = urlparse(url)
+    qs = parse_qs(parsed.query)
+    if "token" in qs and qs["token"]:
+        return qs["token"][0]
+    # fallback: last path segment (old-style URLs with no query string)
+    return url.rstrip("/").rsplit("/", 1)[-1]
 
 def scan_and_open_dashboard():
     detector = cv2.QRCodeDetector()
@@ -47,7 +51,8 @@ def scan_and_open_dashboard():
         data, points, _ = detector.detectAndDecode(frame)
         if data:
             print("Decoded URL:", data)
-            token = data.rsplit('/', 1)[-1]
+            token = extract_token(data)
+            print("Extracted token:", token)
             token_hash = hash_token(token)
 
             conn = get_connection()
@@ -59,8 +64,7 @@ def scan_and_open_dashboard():
 
             if row:
                 print("MATCH FOUND - session_id:", row[0], "status:", row[1])
-                ip = get_local_ip()
-                dashboard_url = f"http://{ip}:{DASHBOARD_PORT}/dashboard.html?token={token}"
+                dashboard_url = f"http://{DASHBOARD_HOST}:{DASHBOARD_PORT}/dashboard.html?token={token}"
                 print("Opening dashboard:", dashboard_url)
                 webbrowser.open(dashboard_url)
             else:
