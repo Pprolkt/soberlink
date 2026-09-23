@@ -101,7 +101,7 @@
 </div>
  
 <script>
-const API_BASE = "http://" + window.location.hostname + ":8000";
+const API_BASE = "http://" + (window.location.hostname || "localhost") + ":8000";
 // Prototype-only placeholder — Phase 11 replaces this with real per-staff login
 const STAFF_ID = "b0a56b91-1d22-4bf4-a0c0-66f1b9ddaab0";
  
@@ -125,6 +125,12 @@ function setStatus(msg, isError) {
   el.style.color = isError ? "#e0722f" : "#9aa0ab";
 }
  
+// Token now travels as a header on every call, never in the URL —
+// keeps it out of Azure's request logs, same fix as checkin.html.
+function authHeaders(token, extra = {}) {
+  return { "Authorization": `Bearer ${token}`, ...extra };
+}
+ 
 async function loadSession() {
   const raw = document.getElementById("tokenInput").value;
   if (!raw) { setStatus("Enter a token or scanned URL first.", true); return; }
@@ -132,7 +138,9 @@ async function loadSession() {
   setStatus("Loading...");
  
   try {
-    const riskResp = await fetch(`${API_BASE}/sessions/${token}/risk`);
+    const riskResp = await fetch(`${API_BASE}/sessions/risk`, {
+      headers: authHeaders(token),
+    });
     if (!riskResp.ok) {
       const err = await riskResp.json();
       setStatus("Error: " + (err.detail?.error || riskResp.status), true);
@@ -181,9 +189,9 @@ async function recordDrink() {
   const token = document.getElementById("tokenInput").dataset.token;
   if (!token) { setStatus("Load a session first.", true); return; }
   const [drink_type, volume_ml, abv] = document.getElementById("drinkSelect").value.split("|");
-  await fetch(`${API_BASE}/sessions/${token}/drinks`, {
+  await fetch(`${API_BASE}/sessions/drinks`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(token, { "Content-Type": "application/json" }),
     body: JSON.stringify({ venue_id: currentVenue(), drink_type, volume_ml: parseFloat(volume_ml), abv: parseFloat(abv) }),
   });
   loadSession();
@@ -192,9 +200,9 @@ async function recordDrink() {
 async function recordConcern() {
   const token = document.getElementById("tokenInput").dataset.token;
   if (!token) { setStatus("Load a session first.", true); return; }
-  await fetch(`${API_BASE}/sessions/${token}/concerns`, {
+  await fetch(`${API_BASE}/sessions/concerns`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(token, { "Content-Type": "application/json" }),
     body: JSON.stringify({ venue_id: currentVenue(), staff_id: STAFF_ID, note: "" }),
   });
   loadSession();
@@ -203,9 +211,9 @@ async function recordConcern() {
 async function recordRefusal() {
   const token = document.getElementById("tokenInput").dataset.token;
   if (!token) { setStatus("Load a session first.", true); return; }
-  await fetch(`${API_BASE}/sessions/${token}/refusals`, {
+  await fetch(`${API_BASE}/sessions/refusals`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(token, { "Content-Type": "application/json" }),
     body: JSON.stringify({ venue_id: currentVenue(), staff_id: STAFF_ID, note: "" }),
   });
   loadSession();
@@ -224,3 +232,4 @@ async function recordRefusal() {
 </script>
 </body>
 </html>
+

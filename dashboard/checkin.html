@@ -123,7 +123,7 @@ async function checkinFlow() {
  
 function render(risk, token) {
   const content = document.getElementById("content");
-  const sessionUrl = `https://example.soberlink.app/session/${token}`;
+  const sessionUrl = `${window.location.protocol}//${window.location.hostname}:8080/dashboard.html?token=${token}`;
  
   if (risk.risk_level === "LOW") {
     content.innerHTML = `
