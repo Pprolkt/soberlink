@@ -138,14 +138,14 @@ def calculate_risk(session_id):
 
     factors = []
 
-    if drinks_3h >= 8:
-        pts = 3
-    elif drinks_3h >= 6:
-        pts = 2
-    elif drinks_3h >= 4:
-        pts = 1
-    else:
-        pts = 0
+    # Starts adding a point at 1 standard drink, then +1 more every 2 drinks
+    # (1, 3, 5, 7, 9, ... drinks each add another point, no upper limit)
+
+    pts = 0
+    threshold = 1
+    while drinks_3h >= threshold:
+        pts += 1
+        threshold += 2
     factors.append({"label": "3-hour volume", "points": pts})
     score = pts
 
