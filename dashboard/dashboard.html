@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>SoberLink — Venue Dashboard</title>
 <style>
   :root {
@@ -102,8 +105,10 @@
  
 <script>
 const API_BASE = "http://" + (window.location.hostname || "localhost") + ":8000";
-// Prototype-only placeholder — Phase 11 replaces this with real per-staff login
-const STAFF_ID = "b0a56b91-1d22-4bf4-a0c0-66f1b9ddaab0";
+// Real staff_id from venue_staff (staff_login = 'staff01') — the old placeholder
+// UUID here didn't exist in the database, which caused Record Concern/Refusal
+// to fail with a foreign key error.
+const STAFF_ID = "647aff54-702d-414d-82c8-513c17a4c3f9";
  
 function currentVenue() {
   return document.getElementById("venueSelect").value;
